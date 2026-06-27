@@ -1,0 +1,10 @@
+node_modules/
+# testing
+test
+# production
+.env
+config.json
+# misc
+uploads
+
+build
