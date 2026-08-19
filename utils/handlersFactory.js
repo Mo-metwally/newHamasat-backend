@@ -1,4 +1,4 @@
-const asyncHandler = require("express-async-handler");
+﻿const asyncHandler = require("express-async-handler");
 const ApiError = require("./apiError");
 const ApiResponse = require("./apiResponse");
 const ApiFeatures = require("./apiFeatures");
@@ -100,7 +100,10 @@ exports.updateOne = (Model, uniqueField, config) =>
 
       const newImagePaths = extractImagePaths(req.body, config);
       if (newImagePaths.length > 0) {
-        await unlinkFiles(oldImagePaths);
+        const filesToUnlink = oldImagePaths.filter((oldPath) => !newImagePaths.includes(oldPath));
+        if (filesToUnlink.length > 0) {
+          await unlinkFiles(filesToUnlink);
+        }
       }
 
       if (Model.name === "Product") {
@@ -319,3 +322,4 @@ exports.findAll = (Model) =>
       })
     );
   });
+

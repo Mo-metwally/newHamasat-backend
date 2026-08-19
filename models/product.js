@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 const { Model } = require("sequelize");
 const { v4: uuidv4 } = require("uuid");
 const setImageURLs = require("../utils/imageUrlHelper");
@@ -209,6 +209,14 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   async function prepareProduct(product) {
+    if (product.image && typeof product.image === "string") {
+      product.image = product.image.includes("/") ? product.image.split("/").pop() : product.image;
+    }
+    if (Array.isArray(product.images)) {
+      product.images = product.images.map((img) =>
+        typeof img === "string" && img.includes("/") ? img.split("/").pop() : img
+      );
+    }
     setImageURLs(product, {
       folder: "products",
       imageFields: ["image", "images"],
@@ -271,3 +279,4 @@ module.exports = (sequelize, DataTypes) => {
 
   return Product;
 };
+

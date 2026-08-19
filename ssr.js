@@ -2,7 +2,7 @@ require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
 const express = require('express');
-const { Product, SubCategory, User } = require('./models');
+const { Product, SubCategory, User, Brand } = require('./models');
 const { Op } = require('sequelize');
 
 function renderNotFoundPage(req, res) {
@@ -181,8 +181,8 @@ module.exports = function setupSSR(app) {
         }
     });
 
-    // ===== SSR Vendor Profile =====
-    app.get('/vendor/:id', async (req, res) => {
+    // ===== SSR Vendor Profile & Products =====
+    app.get(['/vendor/:id', '/vendor/:id/products'], async (req, res) => {
         try {
             if (!fs.existsSync(indexPath)) return res.send(indexTemplate);
 
@@ -195,17 +195,55 @@ module.exports = function setupSSR(app) {
             const vendor = await User.findByPk(id);
             if (!vendor) return res.redirect('/notfound');
 
+            // ✅ جلب صورة البراند إذا كان هناك براند بنفس اسم البائع
+            let vendorImage = '/Hamasat-ShowCase.webp';
+            if (vendor.name) {
+                const brand = await Brand.findOne({
+                    where: {
+                        [Op.or]: [
+                            { name_ar: vendor.name.trim() },
+                            { name_en: vendor.name.trim() }
+                        ]
+                    }
+                });
+                if (brand && brand.image) {
+                    vendorImage = brand.image;
+                }
+            }
+
             const vendorDesc = vendor.vendorDescription ? getPlainText(vendor.vendorDescription).substring(0, 160) : `تسوق من متجر ${vendor.name} على همسات هوم. اكتشف أفضل المنتجات بأسعار تنافسية.`;
             const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
             let html = indexTemplate;
 
+            const isProductsPage = req.path.endsWith('/products');
+            let productsHtml = '';
+            
+            if (isProductsPage) {
+                const vendorProducts = await Product.findAll({
+                    where: { vendorId: id },
+                    order: [['createdAt', 'DESC']],
+                    limit: 12
+                });
+                if (vendorProducts && vendorProducts.length > 0) {
+                    productsHtml = `
+                        <h2>منتجات ${vendor.name}</h2>
+                        <ul>
+                            ${vendorProducts.map(p => `<li><a href="/product/${p.id}">${p.name_ar}</a> - ${p.price} EGP</li>`).join('')}
+                        </ul>
+                    `;
+                }
+            }
+
             // ✅ SEO Meta Tags
+            const pageTitle = isProductsPage ? `منتجات ${vendor.name} - متجر همسات هوم` : `${vendor.name} - متجر همسات هوم`;
+            const pageDesc = isProductsPage ? `تصفح أحدث المنتجات والعروض من متجر ${vendor.name} على همسات هوم. تشكيلة مميزة من المنتجات المتوفرة بأفضل الأسعار.` : vendorDesc;
+            
             html = injectMeta(html, {
-                title: `${vendor.name} - متجر همسات هوم`,
-                description: vendorDesc,
-                image: '/Hamasat-ShowCase.webp',
-                keywords: `${vendor.name}, متجر ${vendor.name}, ${vendor.businessField || 'أدوات منزلية'}, همسات هوم, شراء أونلاين, تسوق, تجهيز عرائس`,
+                title: pageTitle,
+                description: pageDesc,
+                image: vendorImage,
+                keywords: `منتجات ${vendor.name}, متجر ${vendor.name}, ${vendor.businessField || 'أدوات منزلية'}, همسات هوم, شراء أونلاين, تسوق, أفضل الأسعار`,
                 url,
             });
 
@@ -215,8 +253,9 @@ module.exports = function setupSSR(app) {
                 "@type": "Store",
                 "name": vendor.name,
                 "description": vendorDesc,
+                "image": vendorImage,
                 "url": url,
-                "telephone": vendor.phoneNumber || "",
+                "telephone": vendor.phone || vendor.phoneNumber || "",
                 "address": vendor.address || ""
             };
 
@@ -229,8 +268,9 @@ module.exports = function setupSSR(app) {
             const seoHtml = `
                 <div id="root">
                     <main>
-                        <h1>${vendor.name}</h1>
-                        <p>${vendorDesc}</p>
+                        <h1>${pageTitle}</h1>
+                        <p>${pageDesc}</p>
+                        ${productsHtml}
                     </main>
                 </div>
             `;

@@ -1,4 +1,4 @@
-const asyncHandler = require("express-async-handler");
+﻿const asyncHandler = require("express-async-handler");
 const { processImageResizing } = require("../utils/imageProcessing");
 const { uploadMixOfImages, uploadSingleImage } = require("../utils/fileUpload");
 
@@ -12,6 +12,7 @@ exports.uploadProductImages = uploadMixOfImages([
     maxCount: 8,
   },
 ]);
+
 exports.resizeProductImages = asyncHandler(async (req, res, next) => {
   if (req.files && req.files.image) {
     const imageCoverFileName = await processImageResizing(
@@ -22,18 +23,50 @@ exports.resizeProductImages = asyncHandler(async (req, res, next) => {
     req.body.image = imageCoverFileName;
   }
 
+  // Combine existing images (if any) with newly uploaded images
+  let existingImages = [];
+  if (req.body.images) {
+    if (Array.isArray(req.body.images)) {
+      existingImages = req.body.images;
+    } else if (typeof req.body.images === "string") {
+      try {
+        const parsed = JSON.parse(req.body.images);
+        existingImages = Array.isArray(parsed) ? parsed : [req.body.images];
+      } catch {
+        existingImages = [req.body.images];
+      }
+    }
+  } else if (req.body.existingImages) {
+    existingImages = Array.isArray(req.body.existingImages)
+      ? req.body.existingImages
+      : [req.body.existingImages];
+  }
+
+  // Clean filenames from full URLs
+  existingImages = existingImages
+    .filter((img) => img && typeof img === "string" && img.trim() !== "")
+    .map((img) => (img.includes("/") ? img.split("/").pop() : img));
+
+  let newImages = [];
   if (req.files && req.files.images) {
-    req.body.images = [];
     await Promise.all(
       req.files.images.map(async (img, index) => {
         const imageName = await processImageResizing(
           img.buffer,
           "products",
-          `product-${index + 1}`
+          `product-${Date.now()}-${index + 1}`
         );
-        req.body.images.push(imageName);
+        newImages.push(imageName);
       })
     );
+  }
+
+  if (
+    (req.files && req.files.images) ||
+    req.body.images !== undefined ||
+    req.body.existingImages !== undefined
+  ) {
+    req.body.images = [...existingImages, ...newImages];
   }
 
   next();

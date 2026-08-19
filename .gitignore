@@ -6,5 +6,5 @@ test
 config.json
 # misc
 uploads
-
+*.zip
 build
